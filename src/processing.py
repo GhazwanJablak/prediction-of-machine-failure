@@ -26,22 +26,30 @@ def null_association(
     associations_table = pd.DataFrame(associations_dict, index = [cols])
     return associations_table
 
-def impute_missing_vals(
-        df:pd.DataFrame
-        ) -> pd.DataFrame:
+class MedianImputer(
+        ) :
     """extract the median value of the varible per group of Type categorical variable and use it to imput nulls.
 
     Parameters:
-    df: Dataframe containin all features.
+    features: List of features.
 
     Returns:
     df: imputed dataframe.
     """
-    temp = df.isnull().sum()
-    cols = list(temp[temp>0].index)
-    for col in cols:
-        df[col] = df[col].fillna(df.groupby("Type")[col].transform("median"))
-    return df
+    def __init__(self, features):
+        self.features = features
+        self.col_dict = {}
+    def fit(self, df):
+        temp = df.isnull().sum()
+        self.cols = list(temp[temp>0].index)
+        for col in self.cols:
+            self.col_dict[col] = df.groupby("Type")[col].transform("median")
+        return self
+    def transform(self, df):
+        for col in self.cols:
+            df[col] = df[col].fillna(self.col_dict[col])
+        return df
+
 
 
 def data_dict(
@@ -113,10 +121,14 @@ def classifier_pipeline(
     target = df[target_col]
     features_all = df[num_cols+cat_cols]
     X_train, X_test, y_train, y_test = train_test_split(features_all, target, test_size=test_size, stratify=target, random_state=random_state)
+    imputer = MedianImputer(num_cols+cat_cols)
+    imputer.fit(X_train)
+    X_train_imp = imputer.transform(X_train)
+    X_test_imp = imputer.transform(X_test)
     encoder = CountEncoder(cat_variables=cat_cols)
-    encoder.fit(X_train)
-    X_train_en = encoder.transform(X_train)
-    X_test_en = encoder.transform(X_test)
+    encoder.fit(X_train_imp)
+    X_train_en = encoder.transform(X_train_imp)
+    X_test_en = encoder.transform(X_test_imp)
     model.fit(X_train_en, y_train)
     predictions = model.predict(X_test_en)
     return y_test, predictions
